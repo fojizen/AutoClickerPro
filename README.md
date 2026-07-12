@@ -1,4 +1,9 @@
 # AutoClicker Pro
+# 🖱️ AutoClicker Pro
+
+![AutoClicker Pro Screenshot](Assets/AutoClickerPro.png)
+
+A complete, modern, dark-themed Auto Clicker / Macro utility for Windows — **C#, .NET 8, WPF, MVVM**.
 
 A complete, modern, dark-themed Auto Clicker / Macro utility for Windows — **C#, .NET 8, WPF, MVVM**, Visual Studio 2022 solution.
 
