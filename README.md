@@ -1,6 +1,8 @@
 # AutoClicker Pro
 # 🖱️ AutoClicker Pro
 
+[![Website](https://img.shields.io/badge/Portfolio-Visit-blue)](https://fojizen.vercel.app/)
+[![Download](https://img.shields.io/badge/Download-Latest%20Release-success)](https://github.com/fojizen/AutoClickerPro/releases/latest)
 ![AutoClicker Pro Screenshot](Assets/AutoClickerPro.png)
 
 A complete, modern, dark-themed Auto Clicker / Macro utility for Windows — **C#, .NET 8, WPF, MVVM**.
