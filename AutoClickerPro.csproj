@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- WPF requires targeting a Windows-specific TFM -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>AutoClickerPro</AssemblyName>
+    <RootNamespace>AutoClickerPro</RootNamespace>
+    <Platforms>x64</Platforms>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- Trim/ReadyToRun can be enabled for smaller, faster startup in Release publishes -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Version>1.0.0</Version>
+    <Product>AutoClicker Pro</Product>
+    <Company>AutoClicker Pro</Company>
+    <Description>A modern, dark-themed auto clicker / mouse macro utility.</Description>
+
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+<SelfContained>true</SelfContained>
+
+<PublishSingleFile>true</PublishSingleFile>
+<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+
+<DebugType>none</DebugType>
+<DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Icon is referenced by ApplicationIcon above; also bundle it as content so it's
+         available at runtime if ever needed (e.g. for a future tray icon feature). -->
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- No external NuGet packages are required: SendInput/RegisterHotKey/SetWindowsHookEx are
+         called via P/Invoke (Services/NativeMethods.cs), and JSON profile persistence uses
+         System.Text.Json, which ships in the net8.0-windows shared framework. -->
+  </ItemGroup>
+
+</Project>

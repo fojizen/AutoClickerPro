@@ -1,0 +1,210 @@
+<Window x:Class="AutoClickerPro.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:AutoClickerPro.ViewModels"
+        xmlns:conv="clr-namespace:AutoClickerPro.Converters"
+        xmlns:helpers="clr-namespace:AutoClickerPro.Helpers"
+        Icon="/Assets/app.ico"
+        Title="AutoClicker Pro" Height="720" Width="920"
+        MinHeight="640" MinWidth="820"
+        Background="{StaticResource BgDarkBrush}"
+        FontFamily="Segoe UI"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <conv:StateToBrushConverter x:Key="StateToBrush"/>
+        <conv:EnumToBooleanConverter x:Key="EnumToBool"/>
+        <conv:CpsDisplayConverter x:Key="CpsDisplay"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- ============================================================
+             Reusable panel template for one mouse button's settings.
+             Bound to a ButtonSettingsViewModel (LeftClick or RightClick).
+             Commands come from the Window's DataContext (MainViewModel)
+             via RelativeSource, with 'this' (the ButtonSettingsViewModel)
+             passed as CommandParameter.
+             ============================================================ -->
+        <DataTemplate x:Key="ButtonPanelTemplate" DataType="{x:Type vm:ButtonSettingsViewModel}">
+            <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
+                <StackPanel>
+                    <!-- Header row: name, enable toggle, live status -->
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding DisplayName}" Style="{StaticResource HeaderText}"/>
+                            <Ellipse Width="8" Height="8" Margin="10,0,0,0" VerticalAlignment="Center"
+                                     Fill="{Binding State, Converter={StaticResource StateToBrush}}"/>
+                            <TextBlock Text="{Binding StatusText}" Style="{StaticResource SubText}" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding RealTimeCps, Converter={StaticResource CpsDisplay}}"
+                                       Style="{StaticResource SubText}" Margin="10,0,0,0" VerticalAlignment="Center"
+                                       Foreground="{StaticResource AccentBrush}"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                  IsChecked="{Binding IsEnabled}" VerticalAlignment="Center"
+                                  ToolTip="Enable/disable this button's macro"/>
+                    </Grid>
+
+                    <!-- CPS: slider + numeric box kept in sync -->
+                    <TextBlock Text="Clicks Per Second (CPS)" Style="{StaticResource SubText}" Margin="0,0,0,4"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="70"/>
+                        </Grid.ColumnDefinitions>
+                        <Slider Grid.Column="0" Minimum="{Binding MinCps}" Maximum="{Binding MaxCps}"
+                                Value="{Binding Cps, UpdateSourceTrigger=PropertyChanged}"
+                                VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBox Grid.Column="1" Style="{StaticResource ModernTextBox}"
+                                 Text="{Binding Cps, UpdateSourceTrigger=PropertyChanged, StringFormat=N1}"
+                                 HorizontalContentAlignment="Center"
+                                 helpers:NumericTextBoxBehavior.IsNumeric="True"/>
+                    </Grid>
+
+                    <!-- Random variation -->
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Random CPS variation (jitter)" VerticalAlignment="Center"
+                                   Style="{StaticResource SubText}"/>
+                        <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                  IsChecked="{Binding UseRandomVariation}"/>
+                    </Grid>
+                    <Grid Margin="0,8,0,0" Visibility="{Binding UseRandomVariation, Converter={StaticResource BoolToVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="70"/>
+                        </Grid.ColumnDefinitions>
+                        <Slider Grid.Column="0" Minimum="1" Maximum="5"
+                                Value="{Binding RandomVariation, UpdateSourceTrigger=PropertyChanged}"
+                                VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBox Grid.Column="1" Style="{StaticResource ModernTextBox}"
+                                 Text="{Binding RandomVariation, UpdateSourceTrigger=PropertyChanged, StringFormat=N1}"
+                                 HorizontalContentAlignment="Center"
+                                 helpers:NumericTextBoxBehavior.IsNumeric="True"/>
+                    </Grid>
+
+                    <!-- Mode: Hold vs Toggle -->
+                    <TextBlock Text="Click Mode" Style="{StaticResource SubText}" Margin="0,16,0,4"/>
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton Content="Toggle" GroupName="{Binding DisplayName}"
+                                     Style="{StaticResource PillRadioButton}"
+                                     IsChecked="{Binding IsToggleMode}" Margin="0,0,8,0"/>
+                        <RadioButton Content="Hold" GroupName="{Binding DisplayName}"
+                                     Style="{StaticResource PillRadioButton}"
+                                     IsChecked="{Binding IsHoldMode}"/>
+                    </StackPanel>
+
+                    <!-- Hotkey -->
+                    <TextBlock Text="Hotkey" Style="{StaticResource SubText}" Margin="0,16,0,4"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Style="{StaticResource ModernTextBox}"
+                                 Text="{Binding Hotkey}" IsReadOnly="True"
+                                 Tag="hotkeyBox"/>
+                        <Button Grid.Column="1" Content="Set Hotkey" Style="{StaticResource ModernButton}"
+                                Margin="8,0,0,0" Click="SetHotkeyButton_Click"/>
+                    </Grid>
+
+                    <!-- Start / Pause / Stop for this button -->
+                    <UniformGrid Columns="3" Margin="0,18,0,0">
+                        <Button Content="Start" Style="{StaticResource PrimaryButton}" Margin="0,0,4,0"
+                                Command="{Binding DataContext.StartCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}"/>
+                        <Button Content="Pause" Style="{StaticResource WarningButton}" Margin="4,0,4,0"
+                                Command="{Binding DataContext.PauseCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}"/>
+                        <Button Content="Stop" Style="{StaticResource DangerButton}" Margin="4,0,0,0"
+                                Command="{Binding DataContext.StopCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}"/>
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ===================== Header ===================== -->
+        <Grid Grid.Row="0" Margin="0,0,0,18">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="AutoClicker Pro" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource SubText}" Margin="0,4,0,0"/>
+            </StackPanel>
+
+            <!-- Global controls -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="Start All" Style="{StaticResource PrimaryButton}" Command="{Binding StartAllCommand}" Margin="0,0,8,0"/>
+                <Button Content="Pause All" Style="{StaticResource WarningButton}" Command="{Binding PauseAllCommand}" Margin="0,0,8,0"/>
+                <Button Content="Stop All" Style="{StaticResource DangerButton}" Command="{Binding StopAllCommand}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- ===================== Two button panels side by side ===================== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                <ContentControl Content="{Binding LeftClick}" ContentTemplate="{StaticResource ButtonPanelTemplate}"/>
+            </ScrollViewer>
+
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                <ContentControl Content="{Binding RightClick}" ContentTemplate="{StaticResource ButtonPanelTemplate}"/>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- ===================== Profile management ===================== -->
+        <Border Grid.Row="2" Style="{StaticResource CardBorder}" Margin="0,4,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="Profile:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                <TextBox Grid.Column="1" Style="{StaticResource ModernTextBox}"
+                         Text="{Binding CurrentProfileName, UpdateSourceTrigger=PropertyChanged}"
+                         VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                <ComboBox Grid.Column="2" Width="180" Margin="0,0,10,0" VerticalAlignment="Center"
+                          ItemsSource="{Binding ProfileNames}"
+                          SelectedItem="{Binding CurrentProfileName, Mode=OneWay}"
+                          SelectionChanged="ProfileComboBox_SelectionChanged"/>
+
+                <Button Grid.Column="3" Content="Save" Style="{StaticResource ModernButton}"
+                        Command="{Binding SaveProfileCommand}" Margin="0,0,8,0"/>
+                <Button Grid.Column="4" Content="Delete" Style="{StaticResource DangerButton}"
+                        Command="{Binding DeleteProfileCommand}" CommandParameter="{Binding CurrentProfileName}"/>
+            </Grid>
+        </Border>
+
+        <!-- ===================== Footer note ===================== -->
+        <TextBlock Grid.Row="3" Margin="0,10,0,0" Style="{StaticResource SubText}"
+                   Text="Hotkeys work globally, even when this window is not focused. Hold Mode is driven by the physical mouse button; Toggle Mode is driven by Start/Stop or the hotkey."/>
+    </Grid>
+</Window>
