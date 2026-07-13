@@ -153,7 +153,8 @@
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <Button Content="Start All" Style="{StaticResource PrimaryButton}" Command="{Binding StartAllCommand}" Margin="0,0,8,0"/>
                 <Button Content="Pause All" Style="{StaticResource WarningButton}" Command="{Binding PauseAllCommand}" Margin="0,0,8,0"/>
-                <Button Content="Stop All" Style="{StaticResource DangerButton}" Command="{Binding StopAllCommand}"/>
+                <Button Content="Stop All" Style="{StaticResource DangerButton}" Command="{Binding StopAllCommand}" Margin="0,0,8,0"/>
+                <Button Content="Exit" Style="{StaticResource DangerButton}" Command="{Binding ExitCommand}"/>
             </StackPanel>
         </Grid>
 

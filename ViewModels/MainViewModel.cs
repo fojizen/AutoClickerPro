@@ -18,6 +18,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private readonly ProfileService _profileService = new();
 
     private readonly Dictionary<MouseButtonTarget, int> _registeredHotkeyIds = new();
+    private bool _isDisposed;
 
     public ButtonSettingsViewModel LeftClick { get; private set; }
     public ButtonSettingsViewModel RightClick { get; private set; }
@@ -52,6 +53,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand StartAllCommand { get; }
     public ICommand PauseAllCommand { get; }
     public ICommand StopAllCommand { get; }
+    public ICommand ExitCommand { get; }
 
     public ICommand SaveProfileCommand { get; }
     public ICommand LoadProfileCommand { get; }
@@ -85,6 +87,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         StartAllCommand = new RelayCommand(() => { StartMacro(LeftClick); StartMacro(RightClick); });
         PauseAllCommand = new RelayCommand(() => { PauseMacro(LeftClick); PauseMacro(RightClick); });
         StopAllCommand = new RelayCommand(() => { StopMacro(LeftClick); StopMacro(RightClick); });
+        ExitCommand = new RelayCommand(ExitApplication);
 
         SaveProfileCommand = new RelayCommand(SaveProfile);
         LoadProfileCommand = new RelayCommand<string>(LoadProfile);
@@ -173,13 +176,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private void OnEngineStateChanged(MouseButtonTarget target, MacroState state)
     {
         var vm = target == MouseButtonTarget.Left ? LeftClick : RightClick;
-        Application.Current.Dispatcher.Invoke(() => vm.State = state);
+        Application.Current.Dispatcher.BeginInvoke(() => vm.State = state);
     }
 
     private void OnRealTimeCpsUpdated(MouseButtonTarget target, double cps)
     {
         var vm = target == MouseButtonTarget.Left ? LeftClick : RightClick;
-        Application.Current.Dispatcher.Invoke(() => vm.RealTimeCps = cps);
+        Application.Current.Dispatcher.BeginInvoke(() => vm.RealTimeCps = cps);
     }
 
     // ---- Hotkeys -----------------------------------------------------------------------------
@@ -294,10 +297,29 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    public void ExitApplication()
+    {
+        if (_isDisposed) return;
+
+        _isDisposed = true;
+        ShutdownServices();
+        Application.Current.Shutdown();
+    }
+
     public void Dispose()
     {
-        _hotkeyService.Dispose();
+        if (_isDisposed) return;
+
+        _isDisposed = true;
+        ShutdownServices();
+    }
+
+    private void ShutdownServices()
+    {
         _engine.StopAll();
+        _hotkeyService.UnregisterAll();
+        _hotkeyService.Stop();
+        _hotkeyService.Dispose();
         _engine.Dispose();
     }
 }

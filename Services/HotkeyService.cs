@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Threading;
 using System.Windows.Input;
 using AutoClickerPro.Models;
 
@@ -39,7 +40,19 @@ public sealed class HotkeyService : IDisposable
 
     private IntPtr _mouseHookHandle;
     private readonly NativeMethods.LowLevelMouseProc _mouseProc;
-    private readonly HashSet<HotkeyMouseButton> _downMouseButtons = new();
+    private readonly MouseHookEvent[] _mouseEventBuffer = new MouseHookEvent[256];
+    private int _mouseEventHead;
+    private int _mouseEventTail;
+    private readonly AutoResetEvent _mouseEventSignal = new(false);
+    private Thread? _mouseWorker;
+    private volatile bool _mouseWorkerRunning;
+    private int _mouseButtonStateMask;
+
+    private struct MouseHookEvent
+    {
+        public bool IsPressed;
+        public HotkeyMouseButton Button;
+    }
 
     // ---- Shared registration bookkeeping -------------------------------------------------------
 
@@ -93,6 +106,8 @@ public sealed class HotkeyService : IDisposable
             _mouseHookHandle = NativeMethods.SetWindowsHookEx(
                 NativeMethods.WH_MOUSE_LL, _mouseProc, moduleHandle, 0);
         }
+
+        StartMouseWorker();
     }
 
     /// <summary>Removes both hooks. Safe to call multiple times.</summary>
@@ -109,6 +124,8 @@ public sealed class HotkeyService : IDisposable
             NativeMethods.UnhookWindowsHookEx(_mouseHookHandle);
             _mouseHookHandle = IntPtr.Zero;
         }
+
+        StopMouseWorker();
     }
 
     /// <summary>
@@ -244,11 +261,6 @@ public sealed class HotkeyService : IDisposable
 
     private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        // WH_MOUSE_LL fires for WM_MOUSEMOVE and WM_MOUSEWHEEL too, which happen orders of
-        // magnitude more often than button events. Checking wParam (cheap, no marshal) first
-        // and bailing out for anything but a button down/up means we never pay for a struct
-        // marshal on plain mouse movement - this keeps the hook procedure fast and CPU usage
-        // low, and keeps it maximally responsive at the instant a real button event needs it.
         if (nCode >= 0 && _mouseRegistrations.Count > 0)
         {
             int msg = wParam.ToInt32();
@@ -261,9 +273,6 @@ public sealed class HotkeyService : IDisposable
             {
                 var data = System.Runtime.InteropServices.Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
 
-                // Never react to clicks we generated ourselves via SendClick - this is what stops
-                // a hotkey assigned to (say) the Left button from retriggering itself every time
-                // the Left-click macro fires a simulated click.
                 if ((data.flags & NativeMethods.LLMHF_INJECTED) == 0)
                 {
                     HotkeyMouseButton button = msg switch
@@ -278,24 +287,148 @@ public sealed class HotkeyService : IDisposable
 
                     if (isDown)
                     {
-                        bool wasAlreadyDown = _downMouseButtons.Contains(button);
-                        _downMouseButtons.Add(button);
-                        if (!wasAlreadyDown)
-                            EvaluateMousePress(button);
+                        if (TryMarkMouseButtonPressed(button))
+                        {
+                            EnqueueMouseEvent(new MouseHookEvent { IsPressed = true, Button = button });
+                        }
                     }
-                    else
+                    else if (TryReleaseMouseButton(button))
                     {
-                        _downMouseButtons.Remove(button);
-                        EvaluateMouseRelease(button);
+                        EnqueueMouseEvent(new MouseHookEvent { IsPressed = false, Button = button });
                     }
                 }
             }
         }
 
-        // Always pass the event through - never swallow real mouse input. This is what keeps
-        // normal left/right clicks working everywhere, at all times, whether the macro is
-        // active or not.
         return NativeMethods.CallNextHookEx(_mouseHookHandle, nCode, wParam, lParam);
+    }
+
+    private void StartMouseWorker()
+    {
+        if (_mouseWorker is { IsAlive: true })
+            return;
+
+        _mouseWorkerRunning = true;
+        _mouseWorker = new Thread(ProcessMouseEvents)
+        {
+            IsBackground = true,
+            Name = "AutoClickerPro.MouseHotkeyWorker"
+        };
+        _mouseWorker.Start();
+    }
+
+    private void StopMouseWorker()
+    {
+        if (_mouseWorker is null)
+            return;
+
+        _mouseWorkerRunning = false;
+        _mouseEventSignal.Set();
+
+        if (_mouseWorker.IsAlive)
+            _mouseWorker.Join(250);
+
+        _mouseWorker = null;
+    }
+
+    private void ProcessMouseEvents()
+    {
+        while (_mouseWorkerRunning)
+        {
+            _mouseEventSignal.WaitOne();
+
+            while (_mouseWorkerRunning && TryDequeueMouseEvent(out MouseHookEvent evt))
+            {
+                if (evt.IsPressed)
+                    EvaluateMousePress(evt.Button);
+                else
+                    EvaluateMouseRelease(evt.Button);
+            }
+        }
+    }
+
+    private bool TryEnqueueMouseEvent(MouseHookEvent evt)
+    {
+        while (true)
+        {
+            int head = Volatile.Read(ref _mouseEventHead);
+            int tail = Volatile.Read(ref _mouseEventTail);
+            int nextTail = (tail + 1) & (_mouseEventBuffer.Length - 1);
+
+            if (nextTail == head)
+                return false;
+
+            if (Interlocked.CompareExchange(ref _mouseEventTail, nextTail, tail) == tail)
+            {
+                _mouseEventBuffer[tail] = evt;
+                Thread.MemoryBarrier();
+                _mouseEventSignal.Set();
+                return true;
+            }
+        }
+    }
+
+    private bool TryDequeueMouseEvent(out MouseHookEvent evt)
+    {
+        evt = default;
+
+        while (true)
+        {
+            int head = Volatile.Read(ref _mouseEventHead);
+            int tail = Volatile.Read(ref _mouseEventTail);
+            if (head == tail)
+                return false;
+
+            evt = _mouseEventBuffer[head];
+            int nextHead = (head + 1) & (_mouseEventBuffer.Length - 1);
+            if (Interlocked.CompareExchange(ref _mouseEventHead, nextHead, head) == head)
+                return true;
+        }
+    }
+
+    private bool TryMarkMouseButtonPressed(HotkeyMouseButton button)
+    {
+        int mask = ButtonToMask(button);
+        while (true)
+        {
+            int current = Volatile.Read(ref _mouseButtonStateMask);
+            if ((current & mask) != 0)
+                return false;
+
+            int updated = current | mask;
+            if (Interlocked.CompareExchange(ref _mouseButtonStateMask, updated, current) == current)
+                return true;
+        }
+    }
+
+    private bool TryReleaseMouseButton(HotkeyMouseButton button)
+    {
+        int mask = ButtonToMask(button);
+        while (true)
+        {
+            int current = Volatile.Read(ref _mouseButtonStateMask);
+            if ((current & mask) == 0)
+                return false;
+
+            int updated = current & ~mask;
+            if (Interlocked.CompareExchange(ref _mouseButtonStateMask, updated, current) == current)
+                return true;
+        }
+    }
+
+    private static int ButtonToMask(HotkeyMouseButton button) => button switch
+    {
+        HotkeyMouseButton.Left => 0x01,
+        HotkeyMouseButton.Right => 0x02,
+        HotkeyMouseButton.Middle => 0x04,
+        HotkeyMouseButton.XButton1 => 0x08,
+        HotkeyMouseButton.XButton2 => 0x10,
+        _ => 0x00
+    };
+
+    private void EnqueueMouseEvent(MouseHookEvent evt)
+    {
+        _ = TryEnqueueMouseEvent(evt);
     }
 
     private void EvaluateMousePress(HotkeyMouseButton button)
