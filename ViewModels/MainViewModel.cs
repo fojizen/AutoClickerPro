@@ -107,35 +107,41 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void OnHotkeyPressed(ButtonSettingsViewModel vm)
     {
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            if (!vm.IsEnabled) return;
+       if (!vm.IsEnabled)
+        return;
 
-            if (vm.Mode == ClickMode.Hold)
-            {
-                // Hold Mode: pressing the hotkey begins clicking immediately.
-                StartMacro(vm);
-            }
-            else
-            {
-                // Toggle Mode: press once to start, press again to stop.
-                if (vm.State is MacroState.Running or MacroState.Paused)
-                    StopMacro(vm);
-                else
-                    StartMacro(vm);
-            }
-        });
+    if (vm.Mode == ClickMode.Hold)
+    {
+        _engine.Start(vm.Model);
+    }
+    else
+    {
+        if (vm.State is MacroState.Running or MacroState.Paused)
+            _engine.Stop(vm.Target);
+        else
+            _engine.Start(vm.Model);
+    }
+
+    Application.Current.Dispatcher.BeginInvoke(() =>
+    {
+        StatusMessage = $"{vm.DisplayName} running";
+    });
     }
 
     private void OnHotkeyReleased(ButtonSettingsViewModel vm)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+         if (!vm.IsEnabled)
+        return;
+
+    if (vm.Mode == ClickMode.Hold)
+    {
+        _engine.Stop(vm.Target);
+
+        Application.Current.Dispatcher.BeginInvoke(() =>
         {
-            // Only Hold Mode reacts to release; Toggle Mode ignores it entirely so a quick
-            // tap of the hotkey still leaves the macro running until pressed again.
-            if (vm.IsEnabled && vm.Mode == ClickMode.Hold)
-                StopMacro(vm);
+            StatusMessage = $"{vm.DisplayName} stopped";
         });
+    }
     }
 
     // ---- Start/Pause/Stop ---------------------------------------------------------------------

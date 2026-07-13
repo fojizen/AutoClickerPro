@@ -27,6 +27,9 @@ public class ClickSettings
     /// <summary>Human readable hotkey string, e.g. "F6" or "Ctrl+Alt+F6".</summary>
     public string Hotkey { get; set; } = string.Empty;
 
+    /// <summary>Extra fixed delay (ms) added after every click, on top of the CPS-derived interval. Range 0-1000.</summary>
+    public double DelayMs { get; set; } = 0;
+
     /// <summary>Creates a deep-enough copy (all value types + one string) for profile save/duplication.</summary>
     public ClickSettings Clone() => new()
     {
@@ -36,6 +39,7 @@ public class ClickSettings
         UseRandomVariation = UseRandomVariation,
         RandomVariation = RandomVariation,
         Mode = Mode,
-        Hotkey = Hotkey
+        Hotkey = Hotkey,
+        DelayMs = DelayMs
     };
 }

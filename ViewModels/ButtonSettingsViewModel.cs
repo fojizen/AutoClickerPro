@@ -24,6 +24,7 @@ public sealed class ButtonSettingsViewModel : ViewModelBase
         _randomVariation = model.RandomVariation;
         _mode = model.Mode;
         _hotkey = model.Hotkey;
+        _delayMs = model.DelayMs;
     }
 
     private bool _isEnabled;
@@ -66,6 +67,21 @@ public sealed class ButtonSettingsViewModel : ViewModelBase
             if (SetField(ref _randomVariation, clamped)) Model.RandomVariation = clamped;
         }
     }
+
+    private double _delayMs;
+    /// <summary>Extra fixed delay in ms added after every click, on top of the CPS-derived interval. Bound to both the Slider and the numeric TextBox - editing either updates the other.</summary>
+    public double DelayMs
+    {
+        get => _delayMs;
+        set
+        {
+            double clamped = Math.Clamp(value, MinDelayMs, MaxDelayMs);
+            if (SetField(ref _delayMs, clamped)) Model.DelayMs = clamped;
+        }
+    }
+
+    public double MinDelayMs => 0;
+    public double MaxDelayMs => 1000;
 
     private ClickMode _mode;
     public ClickMode Mode

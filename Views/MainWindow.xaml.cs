@@ -2,6 +2,8 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using AutoClickerPro.Models;
+using AutoClickerPro.Services;
 using AutoClickerPro.ViewModels;
 
 namespace AutoClickerPro.Views;
@@ -10,7 +12,7 @@ public partial class MainWindow : Window
 {
     private MainViewModel? _vm;
 
-    /// <summary>Non-null while the user is actively pressing keys to define a new hotkey.</summary>
+    /// <summary>Non-null while the user is actively pressing a key or mouse button to define a new hotkey.</summary>
     private ButtonSettingsViewModel? _hotkeyCaptureTarget;
     private Button? _hotkeyCaptureButton;
     private string? _hotkeyPreviousValue;
@@ -23,15 +25,17 @@ public partial class MainWindow : Window
         {
             // MainViewModel is created once the window exists (kept consistent with its
             // constructor signature; the window handle itself is no longer required for
-            // hotkeys, which now use a system-wide keyboard hook instead of RegisterHotKey).
+            // hotkeys, which now use system-wide keyboard/mouse hooks instead of RegisterHotKey).
             _vm = new MainViewModel(this);
             DataContext = _vm;
         };
 
         Closing += (_, _) => _vm?.Dispose();
 
-        // Captures the key combo for hotkey assignment; only active while _hotkeyCaptureTarget is set.
+        // Captures the key combo or mouse button for hotkey assignment; both handlers are
+        // only active while _hotkeyCaptureTarget is set (i.e. right after "Set Hotkey" is clicked).
         PreviewKeyDown += MainWindow_PreviewKeyDown;
+        PreviewMouseDown += MainWindow_PreviewMouseDown;
     }
 
     private void SetHotkeyButton_Click(object sender, RoutedEventArgs e)
@@ -43,7 +47,7 @@ public partial class MainWindow : Window
         _hotkeyCaptureButton = button;
         _hotkeyPreviousValue = target.Hotkey;
 
-        button.Content = "Press a key...";
+        button.Content = "Press a key or mouse button...";
         Keyboard.Focus(this);
     }
 
@@ -76,12 +80,49 @@ public partial class MainWindow : Window
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         sb.Append(key);
 
-        string hotkeyText = sb.ToString();
+        CommitHotkey(sb.ToString());
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Captures Left/Right/Middle/XButton1/XButton2 mouse clicks as a hotkey assignment.
+    /// WPF's routed mouse events natively cover all five buttons via MouseButtonEventArgs.ChangedButton,
+    /// so no extra hook is needed just for the in-app capture UI (the global low-level mouse hook in
+    /// HotkeyService is what makes the assigned button work later, system-wide, while running).
+    /// </summary>
+    private void MainWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_hotkeyCaptureTarget == null) return;
+
+        HotkeyMouseButton? button = e.ChangedButton switch
+        {
+            MouseButton.Left => HotkeyMouseButton.Left,
+            MouseButton.Right => HotkeyMouseButton.Right,
+            MouseButton.Middle => HotkeyMouseButton.Middle,
+            MouseButton.XButton1 => HotkeyMouseButton.XButton1,
+            MouseButton.XButton2 => HotkeyMouseButton.XButton2,
+            _ => null
+        };
+
+        if (button == null) return;
+
+        CommitHotkey(HotkeyService.MouseButtonToHotkeyString(button.Value));
+
+        // Swallow this click entirely - it's being consumed as a hotkey assignment gesture,
+        // not a normal UI interaction (e.g. we don't want it to also trigger whatever control
+        // happens to be underneath the cursor).
+        e.Handled = true;
+    }
+
+    /// <summary>Finalizes whatever key/button combo was just captured: assigns it and re-registers the hotkey.</summary>
+    private void CommitHotkey(string hotkeyText)
+    {
+        if (_hotkeyCaptureTarget == null) return;
+
         _hotkeyCaptureTarget.Hotkey = hotkeyText;
         _vm?.RegisterHotkeyFor(_hotkeyCaptureTarget);
 
         EndHotkeyCapture();
-        e.Handled = true;
     }
 
     private void EndHotkeyCapture()

@@ -77,21 +77,81 @@ internal static class NativeMethods
     /// <summary>Flag set on KBDLLHOOKSTRUCT.flags when the event was injected by our own SendInput calls.</summary>
     internal const uint LLKHF_INJECTED = 0x00000010;
 
-    // Virtual-key codes for modifier keys. Windows reports the specific left/right variant
-    // (e.g. VK_LSHIFT/VK_RSHIFT) through the low-level hook, not the generic VK_SHIFT, so we
-    // track both forms to be safe across OS versions and keyboard drivers.
-    internal const uint VK_SHIFT = 0x10;
-    internal const uint VK_CONTROL = 0x11;
-    internal const uint VK_MENU = 0x12; // Alt
-    internal const uint VK_LSHIFT = 0xA0;
-    internal const uint VK_RSHIFT = 0xA1;
-    internal const uint VK_LCONTROL = 0xA2;
-    internal const uint VK_RCONTROL = 0xA3;
-    internal const uint VK_LMENU = 0xA4;
-    internal const uint VK_RMENU = 0xA5;
+    // Generic virtual-key codes for the modifier keys. Querying these via GetAsyncKeyState
+    // reports "either the left or right variant is down" automatically - Windows aggregates
+    // VK_LCONTROL/VK_RCONTROL into VK_CONTROL for this purpose, so a single check per modifier
+    // is sufficient and there's no need to separately track VK_LSHIFT/VK_RSHIFT/etc.
+    internal const int VK_SHIFT = 0x10;
+    internal const int VK_CONTROL = 0x11;
+    internal const int VK_MENU = 0x12; // Alt
+
+    /// <summary>
+    /// Queries the CURRENT physical state of a key directly from the OS input state table -
+    /// unlike tracking key-down/up messages ourselves, this can never drift out of sync (e.g.
+    /// from a missed key-up while another app had exclusive input focus), and it reflects
+    /// global state regardless of which thread/window currently has focus. This is what makes
+    /// modifier-key checks (Ctrl/Alt/Shift) reliable even while other keys are held.
+    /// </summary>
+    [DllImport("user32.dll")]
+    internal static extern short GetAsyncKeyState(int vKey);
+
+    /// <summary>True if the given virtual key is currently physically held down.</summary>
+    internal static bool IsKeyDown(int vKey) => (GetAsyncKeyState(vKey) & 0x8000) != 0;
 
     [DllImport("user32.dll", SetLastError = true)]
     internal static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    // ---- Low-level mouse hook: used for global mouse-button hotkey press/release detection --
+    //
+    // Mirrors the keyboard hook above but for mouse buttons, so Left/Right/Middle/XButton1/
+    // XButton2 can all be assigned as hotkeys, work system-wide (even when another app/game
+    // has focus), and are detected via genuine WM_*BUTTONDOWN/UP messages - never blocked or
+    // consumed (always passed to CallNextHookEx), so normal mouse clicks keep working exactly
+    // as if this app weren't running whenever the macro isn't actively simulating clicks.
+    //
+    // Critically, this hook must ignore events flagged LLMHF_INJECTED: those are the clicks
+    // *we* generate via SendClick/SendInput. Without this filter, a hotkey assigned to the
+    // same button a macro is clicking would immediately retrigger itself in a feedback loop.
+
+    internal delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct POINT
+    {
+        public int x;
+        public int y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MSLLHOOKSTRUCT
+    {
+        public POINT pt;
+        public uint mouseData;
+        public uint flags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    internal const int WH_MOUSE_LL = 14;
+
+    internal const int WM_LBUTTONDOWN = 0x0201;
+    internal const int WM_LBUTTONUP = 0x0202;
+    internal const int WM_RBUTTONDOWN = 0x0204;
+    internal const int WM_RBUTTONUP = 0x0205;
+    internal const int WM_MBUTTONDOWN = 0x0207;
+    internal const int WM_MBUTTONUP = 0x0208;
+    internal const int WM_XBUTTONDOWN = 0x020B;
+    internal const int WM_XBUTTONUP = 0x020C;
+
+    /// <summary>High word of MSLLHOOKSTRUCT.mouseData for WM_XBUTTON* messages identifies which X button.</summary>
+    internal const ushort XBUTTON1 = 0x0001;
+    internal const ushort XBUTTON2 = 0x0002;
+
+    /// <summary>Flag set on MSLLHOOKSTRUCT.flags when the event was injected by our own SendInput calls.</summary>
+    internal const uint LLMHF_INJECTED = 0x00000001;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -28,3 +28,17 @@ public enum MacroState
     Running,
     Paused
 }
+
+/// <summary>
+/// A physical mouse button that can be assigned as a global hotkey (separate from
+/// <see cref="MouseButtonTarget"/>, which is which button the macro *clicks* - a hotkey can
+/// be assigned to any of these five buttons regardless of which button's macro it controls).
+/// </summary>
+public enum HotkeyMouseButton
+{
+    Left,
+    Right,
+    Middle,
+    XButton1,
+    XButton2
+}

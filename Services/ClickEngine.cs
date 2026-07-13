@@ -40,9 +40,12 @@ public sealed class ClickEngine : IDisposable
 
         if (rt.State == MacroState.Paused)
         {
-            // Resume: just flip the pause flag back, the loop is still alive.
+            // Resume: flip the pause flag back and wake the loop immediately via the signal -
+            // it may currently be blocked in ResumeSignal.WaitAsync() below, and Release() here
+            // unblocks it the instant this hotkey fires rather than after some polling interval.
             rt.IsPaused = false;
             SetState(settings.Target, MacroState.Running);
+            rt.ResumeSignal.Release();
             return;
         }
 
@@ -101,7 +104,11 @@ public sealed class ClickEngine : IDisposable
             {
                 if (rt.IsPaused)
                 {
-                    await Task.Delay(50, token).ConfigureAwait(false);
+                    // Block until Start() calls ResumeSignal.Release() or Stop() cancels the
+                    // token - no fixed polling interval, so a Hold-Mode release-then-press cycle
+                    // (which goes through Pause()/this Resume path) resumes clicking the instant
+                    // the hotkey is pressed again instead of waiting up to the old 50ms poll tick.
+                    await rt.ResumeSignal.WaitAsync(token).ConfigureAwait(false);
                     continue;
                 }
 
@@ -135,13 +142,18 @@ public sealed class ClickEngine : IDisposable
                     effectiveCps = Math.Max(0.5, settings.Cps + jitter);
                 }
 
-                int delayMs = (int)Math.Max(1, Math.Round(1000.0 / effectiveCps));
+                // Manual delay is a fixed extra wait added on top of the CPS-derived interval,
+                // applied after random CPS variation: total = (1000 / effectiveCps) + DelayMs.
+                // DelayMs == 0 reduces exactly to the pre-existing behaviour.
+                double cpsIntervalMs = 1000.0 / effectiveCps;
+                int delayMs = (int)Math.Max(1, Math.Round(cpsIntervalMs + settings.DelayMs));
                 await Task.Delay(delayMs, token).ConfigureAwait(false);
             }
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException)
         {
-            // Expected on Stop() - not an error.
+            // Expected on Stop() - covers both Task.Delay's TaskCanceledException and the
+            // plain OperationCanceledException that ResumeSignal.WaitAsync(token) throws.
         }
     }
 
@@ -151,6 +163,7 @@ public sealed class ClickEngine : IDisposable
         {
             rt.Cts?.Cancel();
             rt.Cts?.Dispose();
+            rt.ResumeSignal.Dispose();
         }
     }
 
@@ -160,5 +173,10 @@ public sealed class ClickEngine : IDisposable
         public CancellationTokenSource? Cts;
         public bool IsPaused;
         public MacroState State = MacroState.Stopped;
+
+        // Starts at 0 (nothing to wait for). Pause->Resume is strictly 1:1 (both Pause() and
+        // the Resume branch of Start() are guarded by State checks), so exactly one Release()
+        // ever matches exactly one WaitAsync() - no risk of the count exceeding the max of 1.
+        public readonly SemaphoreSlim ResumeSignal = new(0, 1);
     }
 }

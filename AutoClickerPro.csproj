@@ -3,8 +3,8 @@
   <PropertyGroup>
     <!-- WPF requires targeting a Windows-specific TFM -->
     <TargetFramework>net8.0-windows</TargetFramework>
-    <OutputType>WinExe</OutputType>
     <Nullable>enable</Nullable>
+    <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -20,15 +20,19 @@
     <Company>AutoClicker Pro</Company>
     <Description>A modern, dark-themed auto clicker / mouse macro utility.</Description>
 
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-<SelfContained>true</SelfContained>
+    
+<TargetFramework>net8.0-windows</TargetFramework>
+<UseWPF>true</UseWPF>
 
+<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+<SelfContained>true</SelfContained>
 <PublishSingleFile>true</PublishSingleFile>
-<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+
+<PublishTrimmed>false</PublishTrimmed>
 <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
 
-<DebugType>none</DebugType>
-<DebugSymbols>false</DebugSymbols>
+<Nullable>enable</Nullable>
+<ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
