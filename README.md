@@ -19,8 +19,7 @@ A modern Windows Auto Clicker built with **C#**, **.NET 8**, **WPF**, and **MVVM
 ## Features
 
 - Independent Left & Right click settings
-- Adjustable CPS (1–50)
-- Manual Delay (0–1000 ms)
+- Adjustable CPS (1,50)
 - Random CPS variation
 - Hold Mode & Toggle Mode
 - Global keyboard & mouse hotkeys
@@ -70,5 +69,11 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 
 ---
 
+<<<<<<< HEAD
 License
 This project is licensed under the MIT License. See the LICENSE file for details.
+=======
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+>>>>>>> ac38989141b9f345a0ed4dec91f8455bf839e825
