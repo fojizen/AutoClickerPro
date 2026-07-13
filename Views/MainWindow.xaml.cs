@@ -13,6 +13,7 @@ public partial class MainWindow : Window
 {
     private MainViewModel? _vm;
     private TaskbarIcon? _trayIcon;
+    private bool _minimizeToTray;
 
     private ButtonSettingsViewModel? _hotkeyCaptureTarget;
     private Button? _hotkeyCaptureButton;
@@ -164,11 +165,18 @@ public partial class MainWindow : Window
 
     private void Window_StateChanged(object? sender, EventArgs e)
     {
-        if (WindowState == WindowState.Minimized)
+        if (WindowState == WindowState.Minimized && _minimizeToTray)
         {
+            _minimizeToTray = false;
             Hide();
             if (_trayIcon != null) _trayIcon.Visibility = Visibility.Visible;
         }
+    }
+
+    private void MinimizeToTray_Click(object sender, RoutedEventArgs e)
+    {
+        _minimizeToTray = true;
+        WindowState = WindowState.Minimized;
     }
 
     private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)

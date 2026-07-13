@@ -157,6 +157,7 @@
                 <Button Content="Start All" Style="{StaticResource PrimaryButton}" Command="{Binding StartAllCommand}" Margin="0,0,8,0"/>
                 <Button Content="Pause All" Style="{StaticResource WarningButton}" Command="{Binding PauseAllCommand}" Margin="0,0,8,0"/>
                 <Button Content="Stop All" Style="{StaticResource DangerButton}" Command="{Binding StopAllCommand}" Margin="0,0,8,0"/>
+                <Button Content="Minimize" Style="{StaticResource ModernButton}" Click="MinimizeToTray_Click" Margin="0,0,8,0" ToolTip="Minimize to system tray"/>
                 <Button Content="Exit" Style="{StaticResource DangerButton}" Command="{Binding ExitCommand}"/>
             </StackPanel>
         </Grid>
