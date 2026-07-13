@@ -13,9 +13,9 @@ namespace AutoClickerPro.ViewModels;
 /// </summary>
 public sealed class MainViewModel : ViewModelBase, IDisposable
 {
-    private readonly ClickEngine _engine = new();
-    private readonly HotkeyService _hotkeyService = new();
-    private readonly ProfileService _profileService = new();
+    private readonly ClickEngine _engine;
+    private readonly HotkeyService _hotkeyService;
+    private readonly ProfileService _profileService;
 
     private readonly Dictionary<MouseButtonTarget, int> _registeredHotkeyIds = new();
     private bool _isDisposed;
@@ -41,11 +41,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     // ---- Commands ----------------------------------------------------------------------------
 
-    /// <summary>
-    /// Generic Start/Pause/Stop commands taking a ButtonSettingsViewModel as CommandParameter.
-    /// Using one generic command (instead of separate Left/Right commands) lets a single
-    /// reusable XAML DataTemplate drive both the Left-Click and Right-Click panels.
-    /// </summary>
     public ICommand StartCommand { get; }
     public ICommand PauseCommand { get; }
     public ICommand StopCommand { get; }
@@ -59,14 +54,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand LoadProfileCommand { get; }
     public ICommand DeleteProfileCommand { get; }
 
-    public MainViewModel(Window ownerWindow)
+    public ICommand ShowWindowCommand { get; }
+
+    public MainViewModel(ClickEngine engine, HotkeyService hotkeyService, ProfileService profileService)
     {
-        // The window is no longer needed by HotkeyService (it now uses a system-wide
-        // keyboard hook instead of RegisterHotKey/WM_HOTKEY), but the parameter is kept so
-        // the view's construction call (`new MainViewModel(this)`) doesn't need to change,
-        // and so a window handle remains available here if a future feature needs one
-        // (e.g. parenting a dialog).
-        _ = ownerWindow;
+        _engine = engine;
+        _hotkeyService = hotkeyService;
+        _profileService = profileService;
 
         var profile = MacroProfile.CreateDefault();
         LeftClick = new ButtonSettingsViewModel(profile.LeftClick);
@@ -75,9 +69,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _engine.RealTimeCpsUpdated += OnRealTimeCpsUpdated;
         _engine.StateChanged += OnEngineStateChanged;
 
-        // Installs the global low-level keyboard hook. This never blocks or consumes any
-        // key, so normal typing and every other application's input keeps working exactly
-        // as before - we only ever observe key down/up events, never swallow them.
         _hotkeyService.Start();
 
         StartCommand = new RelayCommand<ButtonSettingsViewModel>(vm => { if (vm != null) StartMacro(vm); });
@@ -93,58 +84,59 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         LoadProfileCommand = new RelayCommand<string>(LoadProfile);
         DeleteProfileCommand = new RelayCommand<string>(DeleteProfile);
 
+        ShowWindowCommand = new RelayCommand(() =>
+        {
+            if (Application.Current.MainWindow is { } window)
+            {
+                window.Show();
+                window.WindowState = WindowState.Normal;
+                window.Activate();
+            }
+        });
+
         RefreshProfileList();
 
-        // Hotkeys are (re)registered whenever the user changes them; wired up via the view's
-        // "commit" event on the hotkey capture control (see MainWindow.xaml.cs), which calls
-        // RegisterHotkeyFor below. We register the defaults up front here.
         RegisterHotkeyFor(LeftClick);
         RegisterHotkeyFor(RightClick);
     }
 
-    // ---- Hotkey-driven start/stop, for both Toggle Mode and Hold Mode ----------------------
-    //
-    // Toggle Mode: only Pressed matters. First press starts, next press stops.
-    // Hold Mode:   Pressed starts, Released stops - the physical mouse button is never
-    //              involved; only the assigned hotkey drives clicking.
+    // ---- Hotkey-driven start/stop -----------------------------------------------------------
 
     private void OnHotkeyPressed(ButtonSettingsViewModel vm)
     {
-       if (!vm.IsEnabled)
-        return;
+        if (!vm.IsEnabled) return;
 
-    if (vm.Mode == ClickMode.Hold)
-    {
-        _engine.Start(vm.Model);
-    }
-    else
-    {
-        if (vm.State is MacroState.Running or MacroState.Paused)
-            _engine.Stop(vm.Target);
-        else
+        if (vm.Mode == ClickMode.Hold)
+        {
             _engine.Start(vm.Model);
-    }
+        }
+        else
+        {
+            if (vm.State is MacroState.Running or MacroState.Paused)
+                _engine.Stop(vm.Target);
+            else
+                _engine.Start(vm.Model);
+        }
 
-    Application.Current.Dispatcher.BeginInvoke(() =>
-    {
-        StatusMessage = $"{vm.DisplayName} running";
-    });
+        Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            StatusMessage = $"{vm.DisplayName} running";
+        });
     }
 
     private void OnHotkeyReleased(ButtonSettingsViewModel vm)
     {
-         if (!vm.IsEnabled)
-        return;
+        if (!vm.IsEnabled) return;
 
-    if (vm.Mode == ClickMode.Hold)
-    {
-        _engine.Stop(vm.Target);
-
-        Application.Current.Dispatcher.BeginInvoke(() =>
+        if (vm.Mode == ClickMode.Hold)
         {
-            StatusMessage = $"{vm.DisplayName} stopped";
-        });
-    }
+            _engine.Stop(vm.Target);
+
+            Application.Current.Dispatcher.BeginInvoke(() =>
+            {
+                StatusMessage = $"{vm.DisplayName} stopped";
+            });
+        }
     }
 
     // ---- Start/Pause/Stop ---------------------------------------------------------------------
@@ -187,7 +179,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     // ---- Hotkeys -----------------------------------------------------------------------------
 
-    /// <summary>Call after a user assigns a new hotkey to (re)register it with Windows.</summary>
     public void RegisterHotkeyFor(ButtonSettingsViewModel vm)
     {
         if (_registeredHotkeyIds.TryGetValue(vm.Target, out int existingId))
@@ -266,7 +257,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // Stop any running macros before swapping settings out from under them.
         StopMacro(LeftClick);
         StopMacro(RightClick);
 
@@ -293,7 +283,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            StatusMessage = $"Could not delete profile '{name}': {ex.Message}";
+            StatusMessage = $"Could not delete profile: {ex.Message}";
         }
     }
 

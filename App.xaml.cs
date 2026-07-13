@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Threading;
 using AutoClickerPro.Helpers;
+using AutoClickerPro.Services;
 using AutoClickerPro.Views;
 
 namespace AutoClickerPro;
@@ -20,9 +21,6 @@ public partial class App : Application
         base.OnStartup(e);
 
         // ---- Single instance enforcement ----------------------------------------------------
-        // Two instances would both try to register the same global hotkeys and low-level mouse
-        // hook, leading to confusing, conflicting behavior. Refuse to start a second instance,
-        // and do this before any window is created.
         _instanceGuard = new SingleInstanceGuard();
         if (!_instanceGuard.IsFirstInstance)
         {
@@ -36,15 +34,12 @@ public partial class App : Application
             return;
         }
 
+        // ---- Initialize DI container --------------------------------------------------------
+        AppServices.Initialize();
+
         // ---- Global exception handling ------------------------------------------------------
-        // UI-thread exceptions (data binding, event handlers, etc.)
         DispatcherUnhandledException += OnDispatcherUnhandledException;
-
-        // Exceptions on any non-UI thread (e.g. inside a raw Task not awaited from the UI thread).
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
-
-        // Exceptions from a Task that faulted but whose exception was never observed/awaited -
-        // relevant here because ClickEngine's loops are fire-and-forget background Tasks.
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
         // Only now create and show the main window.
@@ -67,8 +62,6 @@ public partial class App : Application
 
     private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
-        // Background click-loop exceptions land here if not already handled internally.
-        // Mark observed so the process isn't torn down, and let the user know.
         e.SetObserved();
         Dispatcher.Invoke(() => ShowError(e.Exception));
     }

@@ -5,14 +5,15 @@ using System.Windows.Input;
 using AutoClickerPro.Models;
 using AutoClickerPro.Services;
 using AutoClickerPro.ViewModels;
+using Hardcodet.Wpf.TaskbarNotification;
 
 namespace AutoClickerPro.Views;
 
 public partial class MainWindow : Window
 {
     private MainViewModel? _vm;
+    private TaskbarIcon? _trayIcon;
 
-    /// <summary>Non-null while the user is actively pressing a key or mouse button to define a new hotkey.</summary>
     private ButtonSettingsViewModel? _hotkeyCaptureTarget;
     private Button? _hotkeyCaptureButton;
     private string? _hotkeyPreviousValue;
@@ -23,19 +24,46 @@ public partial class MainWindow : Window
 
         Loaded += (_, _) =>
         {
-            // MainViewModel is created once the window exists (kept consistent with its
-            // constructor signature; the window handle itself is no longer required for
-            // hotkeys, which now use system-wide keyboard/mouse hooks instead of RegisterHotKey).
-            _vm = new MainViewModel(this);
+            var engine = AppServices.GetService<ClickEngine>();
+            var hotkeyService = AppServices.GetService<HotkeyService>();
+            var profileService = AppServices.GetService<ProfileService>();
+
+            _vm = new MainViewModel(engine, hotkeyService, profileService);
             DataContext = _vm;
+
+            SetupTrayIcon();
         };
 
         Closing += (_, _) => _vm?.Dispose();
 
-        // Captures the key combo or mouse button for hotkey assignment; both handlers are
-        // only active while _hotkeyCaptureTarget is set (i.e. right after "Set Hotkey" is clicked).
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         PreviewMouseDown += MainWindow_PreviewMouseDown;
+    }
+
+    private void SetupTrayIcon()
+    {
+        _trayIcon = new TaskbarIcon
+        {
+            ToolTipText = "AutoClicker Pro - Running",
+            Visibility = Visibility.Collapsed
+        };
+
+        var contextMenu = new ContextMenu();
+        var showItem = new MenuItem { Header = "Show" };
+        showItem.Click += (_, _) =>
+        {
+            Show();
+            WindowState = WindowState.Normal;
+            _trayIcon.Visibility = Visibility.Collapsed;
+        };
+        contextMenu.Items.Add(showItem);
+        contextMenu.Items.Add(new Separator());
+        var exitItem = new MenuItem { Header = "Exit" };
+        exitItem.Click += (_, _) => _vm?.ExitApplication();
+        contextMenu.Items.Add(exitItem);
+
+        _trayIcon.ContextMenu = contextMenu;
+        _trayIcon.DoubleClickCommand = _vm?.ShowWindowCommand;
     }
 
     private void SetHotkeyButton_Click(object sender, RoutedEventArgs e)
@@ -55,7 +83,6 @@ public partial class MainWindow : Window
     {
         if (_hotkeyCaptureTarget == null) return;
 
-        // Ignore bare modifier presses - wait for the actual key.
         if (e.Key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
                    or Key.LeftShift or Key.RightShift or Key.System)
         {
@@ -65,7 +92,6 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.Escape)
         {
-            // Cancel capture, restore previous value.
             _hotkeyCaptureTarget.Hotkey = _hotkeyPreviousValue ?? string.Empty;
             EndHotkeyCapture();
             e.Handled = true;
@@ -84,12 +110,6 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    /// <summary>
-    /// Captures Left/Right/Middle/XButton1/XButton2 mouse clicks as a hotkey assignment.
-    /// WPF's routed mouse events natively cover all five buttons via MouseButtonEventArgs.ChangedButton,
-    /// so no extra hook is needed just for the in-app capture UI (the global low-level mouse hook in
-    /// HotkeyService is what makes the assigned button work later, system-wide, while running).
-    /// </summary>
     private void MainWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (_hotkeyCaptureTarget == null) return;
@@ -108,13 +128,9 @@ public partial class MainWindow : Window
 
         CommitHotkey(HotkeyService.MouseButtonToHotkeyString(button.Value));
 
-        // Swallow this click entirely - it's being consumed as a hotkey assignment gesture,
-        // not a normal UI interaction (e.g. we don't want it to also trigger whatever control
-        // happens to be underneath the cursor).
         e.Handled = true;
     }
 
-    /// <summary>Finalizes whatever key/button combo was just captured: assigns it and re-registers the hotkey.</summary>
     private void CommitHotkey(string hotkeyText)
     {
         if (_hotkeyCaptureTarget == null) return;
@@ -141,6 +157,26 @@ public partial class MainWindow : Window
         if (sender is ComboBox { SelectedItem: string name } && !string.IsNullOrWhiteSpace(name))
         {
             _vm.LoadProfileCommand.Execute(name);
+        }
+    }
+
+    // ---- Tray icon support -------------------------------------------------------------------
+
+    private void Window_StateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState == WindowState.Minimized)
+        {
+            Hide();
+            if (_trayIcon != null) _trayIcon.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_trayIcon != null)
+        {
+            _trayIcon.Visibility = Visibility.Collapsed;
+            _trayIcon.Dispose();
         }
     }
 }

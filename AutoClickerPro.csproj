@@ -1,38 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- WPF requires targeting a Windows-specific TFM -->
     <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>AutoClickerPro</AssemblyName>
     <RootNamespace>AutoClickerPro</RootNamespace>
     <Platforms>x64</Platforms>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <!-- Trim/ReadyToRun can be enabled for smaller, faster startup in Release publishes -->
     <InvariantGlobalization>false</InvariantGlobalization>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <Version>1.0.0</Version>
+    <Version>1.0.2</Version>
     <Product>AutoClicker Pro</Product>
     <Company>AutoClicker Pro</Company>
     <Description>A modern, dark-themed auto clicker / mouse macro utility.</Description>
-
-    
-<TargetFramework>net8.0-windows</TargetFramework>
-<UseWPF>true</UseWPF>
-
-<RuntimeIdentifier>win-x64</RuntimeIdentifier>
-<SelfContained>true</SelfContained>
-<PublishSingleFile>true</PublishSingleFile>
-
-<PublishTrimmed>false</PublishTrimmed>
-<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-
-<Nullable>enable</Nullable>
-<ImplicitUsings>enable</ImplicitUsings>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
@@ -42,9 +31,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- No external NuGet packages are required: SendInput/RegisterHotKey/SetWindowsHookEx are
-         called via P/Invoke (Services/NativeMethods.cs), and JSON profile persistence uses
-         System.Text.Json, which ships in the net8.0-windows shared framework. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
   </ItemGroup>
 
 </Project>
